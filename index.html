@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Круасан и точка — кофейня</title>
+  <meta name="description" content="Кофе, круассаны и хорошее настроение. Учебный демо-сайт кофейни.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ ШАПКА ============ -->
+<header class="header" id="top">
+  <div class="container header__inner">
+    <a href="#home" class="logo" aria-label="На главную">
+      <!-- Логотип: круассан внутри круга + точка -->
+      <svg class="logo__img" viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="30" fill="#496B55"/>
+        <path d="M12 38c2-12 10-18 20-18s18 6 20 18c-4-3-8-4-12-4-3 0-5 2-8 2s-5-2-8-2c-4 0-8 1-12 4z" fill="#F7F1E5"/>
+        <path d="M24 24l3 10M32 21v13M40 24l-3 10" stroke="#496B55" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="48" cy="46" r="6" fill="#DE7848"/>
+      </svg>
+      <span class="logo__text">
+        <strong data-setting="name">Круасан и точка</strong>
+        <small data-setting="tagline">Кофе, круассаны и хорошее настроение</small>
+      </span>
+    </a>
+
+    <button class="burger" id="burger" aria-label="Открыть меню" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+
+    <nav class="nav" id="nav">
+      <a href="#home">Главное</a>
+      <a href="#menu">Меню</a>
+      <a href="#about">О нас</a>
+      <a href="#coffee">Кофе</a>
+      <a href="#delivery">Доставка</a>
+      <a href="#contacts">Контакты</a>
+      <button class="btn btn--accent nav__booking" id="openBookingMobile">Заказать столик</button>
+    </nav>
+
+    <div class="header__actions">
+      <button class="btn btn--accent" id="openBooking">Заказать столик</button>
+      <button class="cart-btn" id="openCart" aria-label="Открыть корзину">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.6 12.4a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.5L21.5 8H6"/></svg>
+        <span class="cart-btn__count" id="cartCount">0</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ ГЛАВНЫЙ ЭКРАН ============ -->
+<section class="hero" id="home">
+  <div class="hero__blob hero__blob--green"></div>
+  <div class="hero__blob hero__blob--orange"></div>
+  <div class="container hero__inner">
+    <div class="hero__text">
+      <h1><span data-setting="heroTitle">Хороший кофе. Свежий круассан. И точка</span><span class="dot">.</span></h1>
+      <p data-setting="heroText">Ароматный кофе, свежая выпечка и уютная атмосфера — всё, что нужно для хорошего дня</p>
+      <a href="#menu" class="btn btn--primary btn--lg">Смотреть меню</a>
+    </div>
+    <div class="hero__photo">
+      <img src="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1000&q=75"
+           alt="Чашка кофе с латте-артом и золотистый круассан на тарелке" onerror="this.onerror=null;this.src=IMG_FALLBACK">
+    </div>
+  </div>
+</section>
+
+<!-- ============ ПРЕИМУЩЕСТВА ============ -->
+<section class="features">
+  <div class="container features__grid">
+    <div class="feature">
+      <svg viewBox="0 0 48 48" class="feature__icon"><path d="M6 30c2-12 8-18 18-18s16 6 18 18c-4-3-8-4-11-4-3 0-4 2-7 2s-4-2-7-2c-3 0-7 1-11 4z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg>
+      <h3>Свежие круассаны</h3><p>Ароматная выпечка каждый день</p>
+    </div>
+    <div class="feature">
+      <svg viewBox="0 0 48 48" class="feature__icon"><path d="M10 18h24v10a10 10 0 0 1-10 10h-4a10 10 0 0 1-10-10V18zM34 21h3a4 4 0 0 1 0 8h-3M18 6c-2 3 2 4 0 7M25 6c-2 3 2 4 0 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h3>Качественный кофе</h3><p>Тщательно подобранные зёрна</p>
+    </div>
+    <div class="feature">
+      <svg viewBox="0 0 48 48" class="feature__icon"><circle cx="24" cy="16" r="8" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M8 42c1-10 7-14 16-14s15 4 16 14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+      <h3>Опытные бариста</h3><p>Внимание к каждой чашке</p>
+    </div>
+    <div class="feature">
+      <svg viewBox="0 0 48 48" class="feature__icon"><path d="M6 22L24 7l18 15v19H6z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><path d="M19 41V28h10v13" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>
+      <h3>Уютное пространство</h3><p>Место для отдыха и встреч</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ МЕНЮ (карточки рисует script.js из каталога) ============ -->
+<section class="section" id="menu">
+  <div class="container">
+    <h2 class="section__title">Популярные напитки</h2>
+    <div class="grid" id="gridDrinks"></div>
+
+    <h2 class="section__title">Круассаны, десерты и выпечка</h2>
+    <div class="grid" id="gridFood"></div>
+  </div>
+</section>
+
+<!-- ============ КОФЕЙНЫЕ ЗЁРНА ============ -->
+<section class="beans" id="coffee">
+  <div class="container beans__inner">
+    <div class="beans__photo">
+      <img src="https://images.unsplash.com/photo-1559056199-641a0ac8b55e?auto=format&fit=crop&w=900&q=75"
+           alt="Упаковка кофейных зёрен" onerror="this.onerror=null;this.src=IMG_FALLBACK">
+    </div>
+    <div class="beans__content">
+      <h2>Секрет хорошего кофе — в зёрнах</h2>
+      <p>Выбираем качественные зёрна, чтобы каждая чашка радовала насыщенным вкусом и ароматом</p>
+      <div class="beans__list" id="gridBeans"></div>
+      <a href="#coffee" class="btn btn--accent" id="chooseBeans">Выбрать зёрна</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ О НАС ============ -->
+<section class="section about" id="about">
+  <div class="container about__inner">
+    <img class="about__photo" src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1000&q=75"
+         alt="Интерьер уютной кофейни" onerror="this.onerror=null;this.src=IMG_FALLBACK">
+    <div>
+      <h2 class="section__title">О кофейне</h2>
+      <p id="aboutText" data-setting="about"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ДОСТАВКА ============ -->
+<section class="section delivery" id="delivery">
+  <div class="container">
+    <h2 class="section__title">Доставка</h2>
+    <div class="delivery__grid">
+      <div class="card-info"><h3>Время приготовления</h3><p>Напитки готовим 5–10 минут, выпечку подаём свежей — обычно в течение 10–15 минут.</p></div>
+      <div class="card-info"><h3>Как это работает</h3><p>Добавьте товары в корзину, нажмите «Оформить заказ» и заполните форму.</p></div>
+      <div class="card-info card-info--note"><h3>Важно</h3><p>Это учебный сайт: служба доставки не подключена, реальная доставка не выполняется. Заказ сохраняется только как демонстрационный.</p></div>
+    </div>
+    <button class="btn btn--primary" id="deliveryOrder">Оформить демо-заказ</button>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ ПОДВАЛ / КОНТАКТЫ ============ -->
+<footer class="footer" id="contacts">
+  <div class="container footer__grid">
+    <div>
+      <h3 data-setting="name">Круасан и точка</h3>
+      <p data-setting="tagline"></p>
+      <p class="footer__demo">Контактные данные демонстрационные.</p>
+    </div>
+    <div>
+      <h4>Контакты</h4>
+      <p>Адрес: <span data-setting="address"></span></p>
+      <p>Время работы: <span data-setting="hours"></span></p>
+      <p>Телефон: <span data-setting="phone"></span></p>
+      <p class="socials">
+        <a id="linkInstagram" href="#" target="_blank" rel="noopener noreferrer">Instagram</a>
+        <a id="linkTelegram" href="#" target="_blank" rel="noopener noreferrer">Telegram</a>
+        <a id="linkWhatsapp" href="#" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+      </p>
+    </div>
+    <div>
+      <h4>Подписка на новости</h4>
+      <form id="subscribeForm" class="subscribe" novalidate>
+        <input type="email" id="subEmail" placeholder="Ваш e-mail" aria-label="E-mail" required>
+        <button class="btn btn--accent" type="submit">Подписаться</button>
+      </form>
+      <p class="form-msg" id="subMsg" role="status"></p>
+      <p class="footer__links">
+        <a href="#" data-modal="privacyModal">Политика конфиденциальности</a><br>
+        <a href="#" data-modal="termsModal">Условия использования</a><br>
+        <a href="login.html" class="admin-link">Вход для администратора</a>
+      </p>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ МОДАЛЬНЫЕ ОКНА ============ -->
+<div class="overlay" id="overlay" hidden></div>
+
+<!-- Корзина -->
+<aside class="drawer" id="cartDrawer" hidden aria-label="Корзина">
+  <div class="drawer__head"><h3>Корзина</h3><button class="close" data-close aria-label="Закрыть">×</button></div>
+  <div class="drawer__body" id="cartItems"></div>
+  <div class="drawer__foot">
+    <div class="cart-total"><span>Итого:</span><strong id="cartTotal">0 ₸</strong></div>
+    <button class="btn btn--primary btn--block" id="checkoutBtn">Оформить заказ</button>
+  </div>
+</aside>
+
+<!-- Оформление заказа -->
+<div class="modal" id="checkoutModal" hidden role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
+  <div class="modal__box">
+    <button class="close" data-close aria-label="Закрыть">×</button>
+    <h3 id="checkoutTitle">Оформление заказа</h3>
+    <form id="checkoutForm" novalidate>
+      <label>Имя<input type="text" id="coName" maxlength="60" required></label>
+      <label>Телефон<input type="tel" id="coPhone" placeholder="+7 (700) 000-00-00" required></label>
+      <label>Комментарий<textarea id="coComment" rows="3" maxlength="300"></textarea></label>
+      <p class="form-msg form-msg--error" id="coError" role="alert"></p>
+      <button class="btn btn--primary btn--block" type="submit">Подтвердить заказ</button>
+    </form>
+    <p class="note">Заказ отправляется на сервер и сразу виден администратору. Это учебный сайт: реальная доставка не выполняется.</p>
+  </div>
+</div>
+
+<!-- Бронирование -->
+<div class="modal" id="bookingModal" hidden role="dialog" aria-modal="true" aria-labelledby="bookingTitle">
+  <div class="modal__box">
+    <button class="close" data-close aria-label="Закрыть">×</button>
+    <h3 id="bookingTitle">Заказать столик</h3>
+    <form id="bookingForm" novalidate>
+      <label>Имя<input type="text" id="bkName" maxlength="60" required></label>
+      <label>Телефон<input type="tel" id="bkPhone" placeholder="+7 (700) 000-00-00" required></label>
+      <div class="row">
+        <label>Дата<input type="date" id="bkDate" required></label>
+        <label>Время<input type="time" id="bkTime" required></label>
+      </div>
+      <label>Количество гостей<input type="number" id="bkGuests" min="1" max="20" value="2" required></label>
+      <p class="form-msg form-msg--error" id="bkError" role="alert"></p>
+      <button class="btn btn--primary btn--block" type="submit">Отправить заявку</button>
+    </form>
+    <p class="note">Заявка демонстрационная и сразу видна администратору.</p>
+  </div>
+</div>
+
+<!-- Сообщение (подтверждения) -->
+<div class="modal" id="infoModal" hidden role="dialog" aria-modal="true">
+  <div class="modal__box">
+    <button class="close" data-close aria-label="Закрыть">×</button>
+    <h3 id="infoTitle"></h3>
+    <div id="infoText"></div>
+    <button class="btn btn--primary" data-close>Понятно</button>
+  </div>
+</div>
+
+<div class="modal" id="privacyModal" hidden role="dialog" aria-modal="true">
+  <div class="modal__box">
+    <button class="close" data-close aria-label="Закрыть">×</button>
+    <h3>Политика конфиденциальности</h3>
+    <p>Это учебный проект. Имя, телефон и комментарий из форм заказа и бронирования сохраняются на сервере сайта и видны только администратору.</p>
+  </div>
+</div>
+<div class="modal" id="termsModal" hidden role="dialog" aria-modal="true">
+  <div class="modal__box">
+    <button class="close" data-close aria-label="Закрыть">×</button>
+    <h3>Условия использования</h3>
+    <p>Сайт создан в учебных целях. Товары, цены и контакты демонстрационные, заказы не исполняются.</p>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="storage.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

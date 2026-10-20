@@ -52,6 +52,12 @@ h1, h2, h3, h4 { font-family: Georgia, "Times New Roman", serif; line-height: 1.
 .header__actions { display: flex; align-items: center; gap: 12px; }
 .cart-btn { position: relative; background: var(--green); color: #fff; border: 0; width: 46px; height: 46px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
 .cart-btn__count { position: absolute; top: -4px; right: -4px; background: var(--orange); color: #fff; font-size: .75rem; font-weight: 700; min-width: 20px; height: 20px; border-radius: 10px; display: grid; place-items: center; padding: 0 4px; }
+.acc { background: transparent; border: 2px solid var(--green); color: var(--green); border-radius: 999px; padding: 8px 16px; font: inherit; font-weight: 600; cursor: pointer; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc:hover, .acc.acc--in { background: var(--green); color: #fff; }
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.tabs button { flex: 1; padding: 10px; border: 2px solid var(--green); border-radius: 999px; background: transparent; color: var(--green); font: inherit; font-weight: 600; cursor: pointer; }
+.tabs button.active { background: var(--green); color: #fff; }
+input[readonly] { background: #efe8d6; }
 .burger { display: none; background: none; border: 0; cursor: pointer; padding: 8px; margin-left: auto; }
 .burger span { display: block; width: 26px; height: 3px; background: var(--green); margin: 5px 0; border-radius: 2px; }
 
@@ -185,6 +191,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--g
   .features__grid { grid-template-columns: 1fr; }
   .header__actions .btn { display: none; } /* на телефоне кнопка «Заказать столик» находится в выпадающем меню */
   .row { grid-template-columns: 1fr; }
+  .acc { padding: 6px 10px; font-size: .85rem; max-width: 96px; }
   .grid { grid-template-columns: 1fr 1fr; gap: 12px; }
   .card__body { padding: 10px; }
   .card__foot { flex-direction: column; align-items: stretch; }

@@ -1,11 +1,15 @@
 /* ==========================================================
    Code.gs — серверная часть для Google Apps Script
    Хранит в Google Таблице: заказы (Orders), брони (Bookings),
-   каталог и настройки сайта (Site).
-   Свойства скрипта: ADMIN_PASSWORD (обязательно), ADMIN_LOGIN (по умолчанию admin).
+   пользователей (Users), каталог и настройки сайта (Site).
+   Свойства скрипта: ADMIN_PASSWORD (обязательно), ADMIN_LOGIN (по умолчанию ADMIN).
+   Пароль администратора хранится ТОЛЬКО в свойствах скрипта, не в коде.
    ========================================================== */
 
-var ORDER_HEAD = ['id', 'number', 'createdAt', 'name', 'phone', 'comment', 'items', 'total', 'status'];
+var ORDER_HEAD = ['id', 'number', 'createdAt', 'name', 'phone', 'comment', 'items', 'total', 'status', 'city', 'address', 'userLogin'];
+var USER_HEAD = ['login', 'salt', 'hash', 'name', 'phone', 'createdAt'];
+var DELIVERY_CITY = 'Тараз';
+var LOGIN_RE = /^[A-Za-z0-9_.\-]{3,30}$/;
 var BOOKING_HEAD = ['id', 'createdAt', 'name', 'phone', 'date', 'time', 'guests', 'status'];
 var ORDER_STATUSES = ['Новый', 'Готовится', 'Готов', 'Выполнен', 'Отменён'];
 var BOOKING_STATUSES = ['Новое', 'Подтверждено', 'Завершено', 'Отменено'];
@@ -36,10 +40,12 @@ function doPost(e) {
       case 'createOrder': return json_(createOrder_(req));
       case 'createBooking': return json_(createBooking_(req));
       case 'login': return json_(login_(req));
+      case 'register': return json_(register_(req));
       case 'getSite': return json_(readSite_());
+      case 'me': return json_(me_(req.token));
       // --- только администратору ---
       default:
-        requireAuth_(req.token);
+        requireAdmin_(req.token);
         switch (req.action) {
           case 'listAll': return json_({ orders: readRows_('Orders', ORDER_HEAD), bookings: readRows_('Bookings', BOOKING_HEAD) });
           case 'listOrders': return json_({ data: readRows_('Orders', ORDER_HEAD) });
@@ -76,6 +82,10 @@ function sheet_(name, head) {
       sh.setFrozenRows(1);
     }
     sh.getRange(1, 1, sh.getMaxRows(), Math.max(head ? head.length : 2, 2)).setNumberFormat('@');
+  } else if (head && sh.getLastColumn() < head.length) {
+    // Старый лист без новых столбцов (city, address…): дописываем заголовки
+    sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold');
+    sh.getRange(1, 1, sh.getMaxRows(), head.length).setNumberFormat('@');
   }
   return sh;
 }
@@ -117,23 +127,103 @@ function str_(v, max) { return String(v == null ? '' : v).trim().slice(0, max); 
 
 /* ---------- Авторизация ---------- */
 
-function login_(req) {
-  var login = props_().getProperty('ADMIN_LOGIN') || 'admin';
-  var pass = props_().getProperty('ADMIN_PASSWORD');
-  if (!pass) throw httpError_(500, 'На сервере не задан ADMIN_PASSWORD (Свойства скрипта).');
-  if (String(req.login) !== login || String(req.password) !== pass) {
-    Utilities.sleep(800); // замедляем подбор пароля
-    throw httpError_(401, 'Неверный логин или пароль.');
+function adminLogin_() { return String(props_().getProperty('ADMIN_LOGIN') || 'ADMIN'); }
+
+// Пароль = 1500 кругов SHA-256 с «солью» (соль у каждого пользователя своя)
+function hashPass_(salt, pass) {
+  var h = salt + ':' + pass;
+  for (var i = 0; i < 1500; i++) {
+    h = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, h + salt));
   }
-  var token = Utilities.getUuid() + Utilities.getUuid();
-  CacheService.getScriptCache().put('t_' + token, '1', TOKEN_TTL);
-  return { token: token };
+  return h;
 }
 
-function requireAuth_(token) {
-  if (!token || !CacheService.getScriptCache().get('t_' + token)) {
-    throw httpError_(401, 'Сессия истекла. Войдите снова.');
+function newSession_(role, login, name) {
+  var token = Utilities.getUuid() + Utilities.getUuid();
+  CacheService.getScriptCache().put('t_' + token, JSON.stringify({ role: role, login: login, name: name }), TOKEN_TTL);
+  return { token: token, role: role, login: login, name: name };
+}
+
+function session_(token) {
+  if (!token) return null;
+  var raw = CacheService.getScriptCache().get('t_' + token);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
+function requireAdmin_(token) {
+  var s = session_(token);
+  if (!s) throw httpError_(401, 'Сессия истекла. Войдите снова.');
+  if (s.role !== 'admin') throw httpError_(403, 'Нет доступа.');
+  return s;
+}
+
+function me_(token) {
+  var s = session_(token);
+  if (!s) throw httpError_(401, 'Сессия истекла. Войдите снова.');
+  return { role: s.role, login: s.login, name: s.name };
+}
+
+// Не более 5 неудачных попыток входа подряд на один логин — потом блокировка на 15 минут
+function checkLock_(login) {
+  var n = Number(CacheService.getScriptCache().get('f_' + login.toLowerCase()) || 0);
+  if (n >= 5) throw httpError_(429, 'Слишком много попыток. Подождите 15 минут.');
+}
+function failLogin_(login) {
+  var c = CacheService.getScriptCache(), k = 'f_' + login.toLowerCase();
+  c.put(k, String(Number(c.get(k) || 0) + 1), 900);
+  Utilities.sleep(800);
+  throw httpError_(401, 'Неверный логин или пароль.');
+}
+
+function findUser_(login) {
+  var sh = sheet_('Users', USER_HEAD);
+  var last = sh.getLastRow();
+  if (last < 2) return null;
+  var rows = sh.getRange(2, 1, last - 1, USER_HEAD.length).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).toLowerCase() === login.toLowerCase()) {
+      return { login: String(rows[i][0]), salt: String(rows[i][1]), hash: String(rows[i][2]), name: String(rows[i][3]), phone: String(rows[i][4]) };
+    }
   }
+  return null;
+}
+
+function login_(req) {
+  var login = str_(req.login, 30), password = String(req.password == null ? '' : req.password);
+  if (!login || !password) throw httpError_(400, 'Введите логин и пароль.');
+  checkLock_(login);
+
+  if (login.toLowerCase() === adminLogin_().toLowerCase()) {
+    var pass = props_().getProperty('ADMIN_PASSWORD');
+    if (!pass) throw httpError_(500, 'На сервере не задан ADMIN_PASSWORD (Свойства скрипта).');
+    if (password !== pass) failLogin_(login);
+    return newSession_('admin', adminLogin_(), 'Администратор');
+  }
+  var u = findUser_(login);
+  if (!u || hashPass_(u.salt, password) !== u.hash) failLogin_(login);
+  var s = newSession_('user', u.login, u.name);
+  s.phone = u.phone;
+  return s;
+}
+
+function register_(req) {
+  var login = str_(req.login, 30), password = String(req.password == null ? '' : req.password);
+  var name = str_(req.name, 60), phone = str_(req.phone, 30);
+  if (!LOGIN_RE.test(login)) throw httpError_(400, 'Логин: 3–30 символов, латиница, цифры, точка, дефис или «_».');
+  if (login.toLowerCase() === adminLogin_().toLowerCase()) throw httpError_(400, 'Этот логин занят.');
+  if (password.length < 6 || password.length > 100) throw httpError_(400, 'Пароль: минимум 6 символов.');
+  if (name.length < 2) throw httpError_(400, 'Введите имя (минимум 2 символа).');
+  if (!PHONE_RE.test(phone)) throw httpError_(400, 'Введите корректный телефон.');
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    if (findUser_(login)) throw httpError_(409, 'Этот логин уже занят.');
+    var salt = Utilities.getUuid();
+    sheet_('Users', USER_HEAD).appendRow([login, salt, hashPass_(salt, password), name, phone, new Date().toISOString()]);
+  } finally { lock.releaseLock(); }
+  var s = newSession_('user', login, name);
+  s.phone = phone;
+  return s;
 }
 
 /* ---------- Общий каталог и настройки сайта ---------- */
@@ -212,6 +302,13 @@ function createOrder_(req) {
   if (!PHONE_RE.test(phone)) throw httpError_(400, 'Введите корректный телефон.');
   if (!Array.isArray(req.items) || !req.items.length || req.items.length > 50) throw httpError_(400, 'Корзина пуста.');
 
+  // Доставка — только по Таразу
+  var city = str_(req.city, 40), address = str_(req.address, 150);
+  if (city.toLowerCase() !== DELIVERY_CITY.toLowerCase()) throw httpError_(400, 'Доставка только по городу ' + DELIVERY_CITY + '.');
+  if (address.length < 5) throw httpError_(400, 'Укажите адрес доставки в Таразе (улица, дом).');
+  var sess = session_(req.token);
+  var userLogin = sess && sess.role === 'user' ? sess.login : '';
+
   // Цены и названия берём из каталога на сервере, а не от браузера
   var site = readSite_();
   var catalog = {};
@@ -244,7 +341,7 @@ function createOrder_(req) {
     }
     var number = max + 1;
     var id = Utilities.getUuid();
-    sh.appendRow([id, number, new Date().toISOString(), name, phone, comment, JSON.stringify(items), total, 'Новый']);
+    sh.appendRow([id, number, new Date().toISOString(), name, phone, comment, JSON.stringify(items), total, 'Новый', DELIVERY_CITY, address, userLogin]);
     return { id: id, number: number, total: total };
   } finally { lock.releaseLock(); }
 }

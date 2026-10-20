@@ -163,12 +163,24 @@ function showInfo(title, html) {
 
 /* ---------- 5. Оформление заказа ---------- */
 const PHONE_RE = /^\+?[0-9\s\-()]{10,18}$/;
+const DELIVERY_CITY = "Тараз";
+
+// Открывает оформление заказа; если клиент вошёл — подставляет его имя и телефон
+function openCheckout() {
+  const s = getSession();
+  if (s && s.role === "user") {
+    if (!$("#coName").value && s.name) $("#coName").value = s.name;
+    if (!$("#coPhone").value && s.phone) $("#coPhone").value = s.phone;
+  }
+  openCheckout();
+}
 
 async function submitOrder(e) {
   e.preventDefault();
   const name = $("#coName").value.trim();
   const phone = $("#coPhone").value.trim();
   const comment = $("#coComment").value.trim();
+  const address = $("#coAddress").value.trim();
   const err = $("#coError");
   const btn = $("#checkoutForm button[type=submit]");
   const cart = getValidCart();
@@ -176,6 +188,7 @@ async function submitOrder(e) {
   if (!cart.length) { err.textContent = "Корзина пуста."; return; }
   if (name.length < 2) { err.textContent = "Введите имя (минимум 2 символа)."; return; }
   if (!PHONE_RE.test(phone)) { err.textContent = "Введите корректный телефон."; return; }
+  if (address.length < 5) { err.textContent = "Укажите адрес доставки в Таразе (улица, дом)."; return; }
   err.textContent = "";
   if (!navigator.onLine) { err.textContent = "Нет подключения к интернету."; return; }
 
@@ -189,12 +202,13 @@ async function submitOrder(e) {
   btn.disabled = true; btn.textContent = "Отправляем…";
   try {
     // Заказ уходит на сервер; цены и наличие сервер проверяет по своему каталогу
-    const res = await createOrder({ name, phone, comment, items });
+    const res = await createOrder({ name, phone, comment, items, city: DELIVERY_CITY, address });
     saveCart([]);
     renderCart();
     $("#checkoutForm").reset();
     showInfo("Заказ № " + res.number + " оформлен",
       `<p>Спасибо, ${escapeHTML(name)}! Заказ на сумму <b>${formatPrice(res.total)}</b> принят и сохранён на сервере.</p>
+       <p>Адрес доставки: ${escapeHTML(DELIVERY_CITY)}, ${escapeHTML(address)}.</p>
        <p class="note">Это учебный сайт: службы доставки нет, заказ не исполняется.</p>`);
   } catch (ex) {
     // Корзину не очищаем: заказ не сохранён
@@ -259,7 +273,80 @@ function submitSubscribe(e) {
   $("#subscribeForm").reset();
 }
 
-/* ---------- 8. Подключение событий ---------- */
+/* ---------- 8. Аккаунт: вход, регистрация, выход ---------- */
+function refreshAccount() {
+  const s = getSession();
+  const btn = $("#accountBtn");
+  btn.textContent = s ? (s.role === "admin" ? "ADMIN" : (s.name || s.login)) : "Войти";
+  btn.classList.toggle("acc--in", !!s);
+}
+
+function openAccount() {
+  const s = getSession();
+  if (!s) {
+    $("#alError").textContent = ""; $("#arError").textContent = "";
+    return openModal($("#authModal"));
+  }
+  $("#accInfo").textContent = s.role === "admin"
+    ? "Вы вошли как администратор."
+    : "Вы вошли как " + (s.name || s.login) + " (" + s.login + ").";
+  // Кнопка админки показывается ТОЛЬКО администратору
+  $("#adminLink").hidden = s.role !== "admin";
+  openModal($("#accountModal"));
+}
+
+function setAuthTab(tab) {
+  $$("[data-auth-tab]").forEach((b) => b.classList.toggle("active", b.dataset.authTab === tab));
+  $("#authLoginForm").hidden = tab !== "login";
+  $("#authRegForm").hidden = tab !== "register";
+}
+
+async function submitAuthLogin(e) {
+  e.preventDefault();
+  const login = $("#alLogin").value.trim(), password = $("#alPass").value;
+  const err = $("#alError"), btn = $("#authLoginForm button[type=submit]");
+  if (!login || !password) { err.textContent = "Введите логин и пароль."; return; }
+  err.textContent = ""; btn.disabled = true; btn.textContent = "Входим…";
+  try {
+    setSession(await loginUser(login, password));
+    $("#authLoginForm").reset();
+    refreshAccount();
+    openAccount();
+  } catch (ex) {
+    err.textContent = ex.message;
+  } finally {
+    btn.disabled = false; btn.textContent = "Войти";
+  }
+}
+
+async function submitAuthRegister(e) {
+  e.preventDefault();
+  const d = { login: $("#arLogin").value.trim(), password: $("#arPass").value, name: $("#arName").value.trim(), phone: $("#arPhone").value.trim() };
+  const err = $("#arError"), btn = $("#authRegForm button[type=submit]");
+  if (!/^[A-Za-z0-9_.\-]{3,30}$/.test(d.login)) { err.textContent = "Логин: 3–30 символов, латиница, цифры, точка, дефис или «_»."; return; }
+  if (d.password.length < 6) { err.textContent = "Пароль: минимум 6 символов."; return; }
+  if (d.name.length < 2) { err.textContent = "Введите имя."; return; }
+  if (!PHONE_RE.test(d.phone)) { err.textContent = "Введите корректный телефон."; return; }
+  err.textContent = ""; btn.disabled = true; btn.textContent = "Регистрируем…";
+  try {
+    setSession(await registerUser(d));
+    $("#authRegForm").reset();
+    refreshAccount();
+    showInfo("Добро пожаловать!", "<p>Аккаунт создан, вы вошли. Имя и телефон теперь подставятся в заказ сами.</p>");
+  } catch (ex) {
+    err.textContent = ex.message;
+  } finally {
+    btn.disabled = false; btn.textContent = "Зарегистрироваться";
+  }
+}
+
+function logout() {
+  clearToken();
+  refreshAccount();
+  closeAll();
+}
+
+/* ---------- 9. Подключение событий ---------- */
 function init() {
   applySettings();
   renderCatalog();
@@ -287,12 +374,22 @@ function init() {
   $("#openCart").addEventListener("click", () => { renderCart(); openModal($("#cartDrawer")); });
   $("#openBooking").addEventListener("click", () => openModal($("#bookingModal")));
   $("#openBookingMobile").addEventListener("click", () => { $("#nav").classList.remove("open"); openModal($("#bookingModal")); });
-  $("#checkoutBtn").addEventListener("click", () => openModal($("#checkoutModal")));
+  $("#checkoutBtn").addEventListener("click", () => openCheckout());
   $("#deliveryOrder").addEventListener("click", () => {
-    if (getValidCart().length) openModal($("#checkoutModal"));
+    if (getValidCart().length) openCheckout();
     else { document.getElementById("menu").scrollIntoView({ behavior: "smooth" }); showInfo("Корзина пуста", "<p>Сначала добавьте товары из меню.</p>"); }
   });
   $("#chooseBeans").addEventListener("click", (e) => { e.preventDefault(); $("#gridBeans").scrollIntoView({ behavior: "smooth", block: "center" }); });
+
+  // Аккаунт
+  refreshAccount();
+  $("#accountBtn").addEventListener("click", openAccount);
+  $("#authLoginForm").addEventListener("submit", submitAuthLogin);
+  $("#authRegForm").addEventListener("submit", submitAuthRegister);
+  $("#logoutBtn").addEventListener("click", logout);
+  $$("[data-auth-tab]").forEach((b) => b.addEventListener("click", () => setAuthTab(b.dataset.authTab)));
+  // Если токен истёк (прошло больше 6 часов) — выходим из аккаунта на этом устройстве
+  if (getSession()) fetchMe().catch((ex) => { if (ex.status === 401) { clearToken(); refreshAccount(); } });
 
   $("#checkoutForm").addEventListener("submit", submitOrder);
   $("#bookingForm").addEventListener("submit", submitBooking);

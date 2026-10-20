@@ -135,9 +135,26 @@ const NO_SERVER_MSG = APPS_URL
       ? "Приём заказов не подключён: укажите адрес Google Apps Script в config.js (см. README)."
       : "Сервер заказов недоступен. Запустите его командой «node server.js» и откройте сайт по адресу http://localhost:3000");
 
-const getToken = () => sessionStorage.getItem(KEYS.token) || "";
-const setToken = (t) => sessionStorage.setItem(KEYS.token, t);
-const clearToken = () => sessionStorage.removeItem(KEYS.token);
+/* Сессия входа: { token, role: "user" | "admin", login, name, phone }.
+   Администратор — в sessionStorage (закрыл вкладку — вышел),
+   обычный пользователь — в localStorage (остаётся на этом устройстве). */
+const SESSION_KEY = "kit_session";
+function getSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
+    const s = raw ? JSON.parse(raw) : null;
+    return s && s.token ? s : null;
+  } catch (e) { return null; }
+}
+function setSession(s) {
+  clearToken();
+  try { (s.role === "admin" ? sessionStorage : localStorage).setItem(SESSION_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
+}
+const getToken = () => (getSession() || {}).token || "";
+const isAdminSession = () => (getSession() || {}).role === "admin";
+function clearToken() {
+  try { sessionStorage.removeItem(SESSION_KEY); localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
+}
 
 // Запрос к собственному серверу (node server.js). Бросает Error с понятным текстом.
 async function api(method, path, body, withAuth) {
@@ -180,9 +197,15 @@ async function gas(action, payload, withAuth) {
 }
 
 // Единый набор функций: сайт и админка не знают, куда именно отправляются данные
-const createOrder = (o) => APPS_URL ? gas("createOrder", o) : api("POST", "/api/orders", o);
+// Заказ уходит с токеном (если клиент вошёл), чтобы привязаться к аккаунту
+const createOrder = (o) => APPS_URL ? gas("createOrder", o, true) : api("POST", "/api/orders", o, true);
 const createBooking = (b) => APPS_URL ? gas("createBooking", b) : api("POST", "/api/bookings", b);
-const loginAdmin = (login, password) => APPS_URL ? gas("login", { login, password }) : api("POST", "/api/login", { login, password });
+// Вход: и для клиентов, и для администратора (ответ содержит role)
+const loginUser = (login, password) => APPS_URL ? gas("login", { login, password }) : api("POST", "/api/login", { login, password });
+const registerUser = (d) => APPS_URL ? gas("register", d) : api("POST", "/api/register", d);
+const loginAdmin = loginUser;
+// Проверка, что сохранённая сессия ещё действует (401 — токен истёк)
+const fetchMe = () => APPS_URL ? gas("me", {}, true) : api("GET", "/api/me", undefined, true);
 const fetchOrders = () => APPS_URL ? gas("listOrders", {}, true).then((r) => r.data) : api("GET", "/api/orders", undefined, true);
 const fetchBookings = () => APPS_URL ? gas("listBookings", {}, true).then((r) => r.data) : api("GET", "/api/bookings", undefined, true);
 // Заказы и брони одним запросом (для Apps Script это вдвое меньше нагрузки на квоты)

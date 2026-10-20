@@ -7,8 +7,8 @@
 /* ---------- Проверка входа ----------
    Настоящая проверка делается на сервере: без токена он ничего не отдаст.
    Эта строка лишь отправляет на страницу входа, если токена нет. */
-if (!getToken()) {
-  window.location.replace("login.html");
+if (!isAdminSession()) {
+  window.location.replace("index.html");
 }
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -77,7 +77,7 @@ function showServerMsg(text) {
 
 function goLogin() {
   clearToken();
-  window.location.replace("login.html");
+  window.location.replace("index.html");
 }
 
 /* ---------- Загрузка данных с сервера ---------- */
@@ -418,7 +418,7 @@ function renderOrders() {
     ? list.map((o) => `
       <tr class="${highlight.has(o.id) && o.status === "Новый" ? "is-new" : ""}">
         <td data-label="№"><b>${o.number}</b></td>
-        <td data-label="Клиент">${escapeHTML(o.name)}</td>
+        <td data-label="Клиент">${escapeHTML(o.name)}${o.address ? `<div class="items">${escapeHTML(o.city || "")}, ${escapeHTML(o.address)}</div>` : ""}${o.userLogin ? `<div class="items">аккаунт: ${escapeHTML(o.userLogin)}</div>` : ""}</td>
         <td data-label="Телефон">${phoneLink(o.phone)}</td>
         <td data-label="Состав" class="items">${(o.items || []).map((i) => escapeHTML(i.name) + " ×" + i.qty).join(", ")}</td>
         <td data-label="Сумма">${formatPrice(o.total)}</td>
@@ -435,6 +435,8 @@ function viewOrder(id) {
   $("#orderModalTitle").textContent = "Заказ № " + o.number;
   $("#orderModalBody").innerHTML = `
     <p><b>Клиент:</b> ${escapeHTML(o.name)}<br><b>Телефон:</b> ${phoneLink(o.phone)}<br>
+    <b>Адрес доставки:</b> ${escapeHTML(o.city || "")}, ${escapeHTML(o.address || "—")}<br>
+    ${o.userLogin ? `<b>Аккаунт:</b> ${escapeHTML(o.userLogin)}<br>` : ""}
     <b>Создан:</b> ${fmtDate(o.createdAt)}<br><b>Статус:</b> ${escapeHTML(o.status)}</p>
     <p><b>Комментарий:</b> ${escapeHTML(o.comment || "—")}</p>
     <div class="table-wrap"><table style="min-width:0"><thead><tr><th>Товар</th><th>Цена</th><th>Кол-во</th><th>Сумма</th></tr></thead><tbody>
@@ -562,7 +564,7 @@ function init() {
     if (b) showSection(b.dataset.section);
   });
   $("#menuToggle").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
-  $("#logout").addEventListener("click", () => { clearToken(); window.location.href = "login.html"; });
+  $("#logout").addEventListener("click", () => { clearToken(); window.location.href = "index.html"; });
 
   $("#prodFilter").addEventListener("change", renderProducts);
   $("#addProduct").addEventListener("click", () => openProductForm(null));

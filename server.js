@@ -13,7 +13,9 @@ const crypto = require("crypto");
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = __dirname;
 const DATA = path.join(ROOT, "data");
-const ADMIN_LOGIN = process.env.ADMIN_LOGIN || "admin";
+const ADMIN_LOGIN = process.env.ADMIN_LOGIN || "ADMIN";
+const DELIVERY_CITY = "Тараз";
+const LOGIN_RE = /^[A-Za-z0-9_.\-]{3,30}$/;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "demo123";
 const TOKEN_TTL = 6 * 60 * 60 * 1000;
 
@@ -36,19 +38,65 @@ function writeJson(name, value) {
 }
 
 /* ---------- Токены администратора ---------- */
-const tokens = new Map();
-function newToken() {
-  const t = crypto.randomBytes(32).toString("hex");
-  tokens.set(t, Date.now() + TOKEN_TTL);
-  return t;
+const tokens = new Map(); // token -> { exp, role, login, name }
+function newSession(role, login, name) {
+  const token = crypto.randomBytes(32).toString("hex");
+  tokens.set(token, { exp: Date.now() + TOKEN_TTL, role, login, name });
+  return { token, role, login, name };
 }
-function isAuthed(req) {
+function getSession(req) {
   const h = req.headers.authorization || "";
   const t = h.startsWith("Bearer ") ? h.slice(7) : "";
-  const exp = tokens.get(t);
-  if (!exp) return false;
-  if (exp < Date.now()) { tokens.delete(t); return false; }
-  return true;
+  const s = tokens.get(t);
+  if (!s) return null;
+  if (s.exp < Date.now()) { tokens.delete(t); return null; }
+  return s;
+}
+function isAuthed(req) { const s = getSession(req); return !!s && s.role === "admin"; }
+
+/* ---------- Пользователи (пароль — scrypt с индивидуальной солью) ---------- */
+function hashPass(salt, pass) { return crypto.scryptSync(String(pass), salt, 32).toString("hex"); }
+function findUser(login) {
+  return readJson("users.json", []).find((u) => u.login.toLowerCase() === String(login).toLowerCase());
+}
+// Не более 5 неудачных входов подряд на логин: блокировка на 15 минут
+const fails = new Map();
+function checkLock(login) {
+  const f = fails.get(String(login).toLowerCase());
+  if (f && f.n >= 5 && f.until > Date.now()) throw new HttpError(429, "Слишком много попыток. Подождите 15 минут.");
+}
+async function failLogin(login) {
+  const k = String(login).toLowerCase(), f = fails.get(k);
+  fails.set(k, { n: (f && f.until > Date.now() ? f.n : 0) + 1, until: Date.now() + 15 * 60 * 1000 });
+  await new Promise((r) => setTimeout(r, 800));
+  throw new HttpError(401, "Неверный логин или пароль.");
+}
+async function loginUser(b) {
+  const login = str(b.login, 30), password = String(b.password == null ? "" : b.password);
+  if (!login || !password) throw new HttpError(400, "Введите логин и пароль.");
+  checkLock(login);
+  if (login.toLowerCase() === ADMIN_LOGIN.toLowerCase()) {
+    if (!safeEqual(password, ADMIN_PASSWORD)) await failLogin(login);
+    return newSession("admin", ADMIN_LOGIN, "Администратор");
+  }
+  const u = findUser(login);
+  if (!u || !safeEqual(hashPass(u.salt, password), u.hash)) await failLogin(login);
+  return Object.assign(newSession("user", u.login, u.name), { phone: u.phone });
+}
+function registerUser(b) {
+  const login = str(b.login, 30), password = String(b.password == null ? "" : b.password);
+  const name = str(b.name, 60), phone = str(b.phone, 30);
+  if (!LOGIN_RE.test(login)) throw new HttpError(400, "Логин: 3–30 символов, латиница, цифры, точка, дефис или «_».");
+  if (login.toLowerCase() === ADMIN_LOGIN.toLowerCase()) throw new HttpError(400, "Этот логин занят.");
+  if (password.length < 6 || password.length > 100) throw new HttpError(400, "Пароль: минимум 6 символов.");
+  if (name.length < 2) throw new HttpError(400, "Введите имя (минимум 2 символа).");
+  if (!PHONE_RE.test(phone)) throw new HttpError(400, "Введите корректный телефон.");
+  if (findUser(login)) throw new HttpError(409, "Этот логин уже занят.");
+  const salt = crypto.randomBytes(16).toString("hex");
+  const users = readJson("users.json", []);
+  users.push({ login, salt, hash: hashPass(salt, password), name, phone, createdAt: new Date().toISOString() });
+  writeJson("users.json", users);
+  return Object.assign(newSession("user", login, name), { phone });
 }
 function safeEqual(a, b) {
   const ha = crypto.createHash("sha256").update(String(a)).digest();
@@ -128,11 +176,16 @@ function cleanSettings(s) {
 }
 
 /* ---------- Заказы и брони ---------- */
-function createOrder(b) {
+function createOrder(b, sess) {
   const name = str(b.name, 60), phone = str(b.phone, 30), comment = str(b.comment, 300);
   if (name.length < 2) throw new HttpError(400, "Введите имя (минимум 2 символа).");
   if (!PHONE_RE.test(phone)) throw new HttpError(400, "Введите корректный телефон.");
   if (!Array.isArray(b.items) || !b.items.length || b.items.length > 50) throw new HttpError(400, "Корзина пуста.");
+  // Доставка — только по Таразу
+  const city = str(b.city, 40), address = str(b.address, 150);
+  if (city.toLowerCase() !== DELIVERY_CITY.toLowerCase()) throw new HttpError(400, "Доставка только по городу " + DELIVERY_CITY + ".");
+  if (address.length < 5) throw new HttpError(400, "Укажите адрес доставки в Таразе (улица, дом).");
+  const userLogin = sess && sess.role === "user" ? sess.login : "";
 
   // Цены и названия берём из каталога на сервере, а не от браузера
   const site = readSite();
@@ -155,7 +208,7 @@ function createOrder(b) {
   }
   const orders = readJson("orders.json", []);
   const number = orders.reduce((m, o) => Math.max(m, o.number || 0), 0) + 1;
-  const order = { id: crypto.randomUUID(), number, createdAt: new Date().toISOString(), name, phone, comment, items, total, status: "Новый" };
+  const order = { id: crypto.randomUUID(), number, createdAt: new Date().toISOString(), name, phone, comment, items, total, status: "Новый", city: DELIVERY_CITY, address, userLogin };
   orders.push(order);
   writeJson("orders.json", orders);
   return { id: order.id, number, total };
@@ -193,19 +246,20 @@ async function handleApi(req, res, url) {
   // --- публичные ---
   if (m === "GET" && p === "/api/site/version") return send(res, 200, { version: readSite().version });
   if (m === "GET" && p === "/api/site") return send(res, 200, readSite());
-  if (m === "POST" && p === "/api/orders") return send(res, 201, createOrder(await readBody(req, 100 * 1024)));
+  if (m === "POST" && p === "/api/orders") return send(res, 201, createOrder(await readBody(req, 100 * 1024), getSession(req)));
   if (m === "POST" && p === "/api/bookings") return send(res, 201, createBooking(await readBody(req, 20 * 1024)));
-  if (m === "POST" && p === "/api/login") {
-    const b = await readBody(req, 10 * 1024);
-    if (!safeEqual(b.login, ADMIN_LOGIN) || !safeEqual(b.password, ADMIN_PASSWORD)) {
-      await new Promise((r) => setTimeout(r, 800)); // замедляем подбор пароля
-      throw new HttpError(401, "Неверный логин или пароль.");
-    }
-    return send(res, 200, { token: newToken() });
+  if (m === "POST" && p === "/api/login") return send(res, 200, await loginUser(await readBody(req, 10 * 1024)));
+  if (m === "POST" && p === "/api/register") return send(res, 201, registerUser(await readBody(req, 10 * 1024)));
+  if (m === "GET" && p === "/api/me") {
+    const s = getSession(req);
+    if (!s) throw new HttpError(401, "Сессия истекла. Войдите снова.");
+    return send(res, 200, { role: s.role, login: s.login, name: s.name });
   }
 
   // --- только администратор ---
-  if (!isAuthed(req)) throw new HttpError(401, "Сессия истекла. Войдите снова.");
+  const sess = getSession(req);
+  if (!sess) throw new HttpError(401, "Сессия истекла. Войдите снова.");
+  if (sess.role !== "admin") throw new HttpError(403, "Нет доступа.");
   if (m === "GET" && p === "/api/orders") return send(res, 200, readJson("orders.json", []));
   if (m === "GET" && p === "/api/bookings") return send(res, 200, readJson("bookings.json", []));
   let mm;

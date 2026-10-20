@@ -1,13 +1,12 @@
 /* ==========================================================
-   login.js — вход администратора
-   Логин и пароль проверяет СЕРВЕР (server.js), а не эта страница.
-   В ответ сервер выдаёт токен; без него заказы прочитать нельзя.
-   Пароль по умолчанию (для учебного запуска): admin / demo123.
-   Для настоящего сайта задайте свой: ADMIN_PASSWORD=... node server.js
+   login.js — запасная страница входа (на сайте она нигде не показана).
+   Обычный вход и регистрация — в окне «Войти» на главной странице.
+   Здесь можно войти по прямой ссылке /login.html (логин ADMIN).
+   Логин и пароль проверяет СЕРВЕР, пароль в коде не хранится.
    ========================================================== */
 
-// Если токен уже есть — сразу в панель (админка сама проверит, что он ещё действителен)
-if (getToken()) window.location.replace("admin.html");
+// Если администратор уже вошёл — сразу в панель
+if (isAdminSession()) window.location.replace("admin.html");
 
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -20,9 +19,9 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   err.textContent = "";
   btn.disabled = true;
   try {
-    const res = await loginAdmin(login, password);
-    setToken(res.token); // sessionStorage: исчезнет при закрытии вкладки
-    window.location.href = "admin.html";
+    const res = await loginUser(login, password);
+    setSession(res);
+    window.location.href = res.role === "admin" ? "admin.html" : "index.html";
   } catch (ex) {
     err.textContent = ex.message;
   } finally {

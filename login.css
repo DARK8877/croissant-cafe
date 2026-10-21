@@ -1,0 +1,24 @@
+/* login.css — стили страницы входа */
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+  font-family: "Segoe UI", Roboto, Arial, sans-serif; color: #292B25;
+  background: #F7F1E5 radial-gradient(circle at 90% 10%, #A9C0AD 0, #A9C0AD 180px, transparent 181px);
+}
+.login {
+  background: #FFFDF8; width: min(420px, 100%); padding: 32px 28px; border-radius: 28px;
+  box-shadow: 0 12px 36px rgba(73, 107, 85, .2); text-align: center;
+}
+.login__logo { width: 72px; height: 72px; }
+h1 { font-family: Georgia, serif; color: #496B55; margin: 10px 0 0; }
+.login__sub { margin: 4px 0 22px; color: #6b6b60; }
+form { text-align: left; }
+label { display: block; font-weight: 600; font-size: .92rem; margin-bottom: 14px; }
+input { width: 100%; margin-top: 4px; padding: 12px 14px; border: 2px solid #d9d2c0; border-radius: 12px; font: inherit; }
+input:focus { outline: none; border-color: #496B55; }
+.btn { width: 100%; padding: 13px; border: 0; border-radius: 999px; background: #496B55; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }
+.btn:hover { background: #3b5845; }
+.error { color: #c0392b; min-height: 1.3em; margin: 0 0 8px; font-size: .9rem; }
+.hint { font-size: .8rem; background: #fbe6da; border-radius: 12px; padding: 10px 12px; margin: 18px 0 10px; text-align: left; }
+code { background: #fff; padding: 1px 5px; border-radius: 4px; }
+.back { color: #496B55; font-size: .9rem; }

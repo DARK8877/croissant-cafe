@@ -10,6 +10,7 @@ const KEYS = {
   settings: "kit_settings",
   cart: "kit_cart",
   staff: "kit_staff",       // кэш публичного списка команды
+  history: "kit_order_history", // история заказов (только на этом устройстве)
   token: "kit_admin_token"   // токен администратора (sessionStorage), выдаётся сервером
 };
 
@@ -60,7 +61,8 @@ const DEFAULT_SETTINGS = {
   about: "«Круасан и точка» — небольшая кофейня, где каждый день пекут свежие круассаны и варят кофе из тщательно подобранных зёрен. Мы верим, что хороший день начинается с ароматной чашки и тёплой выпечки. Наши бариста уделяют внимание каждой детали, а уютное пространство подходит и для отдыха, и для встреч с друзьями.",
   instagram: "https://instagram.com/",
   telegram: "https://t.me/",
-  whatsapp: "https://wa.me/"
+  whatsapp: "https://wa.me/",
+  showTeam: "1"             // "0" — блок «Команда» скрыт на сайте
 };
 
 /* ---------- Безопасное чтение / запись ---------- */
@@ -210,6 +212,27 @@ const registerUser = (d) => APPS_URL ? gas("register", d) : api("POST", "/api/re
 const loginAdmin = loginUser;
 // Проверка, что сохранённая сессия ещё действует (401 — токен истёк)
 const fetchMe = () => APPS_URL ? gas("me", {}, true) : api("GET", "/api/me", undefined, true);
+// Личный кабинет: изменить имя/телефон/адрес и пароль
+const saveProfile = (d) => APPS_URL ? gas("updateProfile", d, true) : api("POST", "/api/profile", d, true);
+const changePassword = (current, password) => APPS_URL ? gas("changePassword", { current, password }, true) : api("POST", "/api/password", { current, password }, true);
+// Обновляет данные в сохранённой сессии (например, после смены имени)
+function updateSession(patch) {
+  const s = getSession();
+  if (s) setSession(Object.assign({}, s, patch));
+}
+
+/* ---------- История заказов: хранится только в браузере этого устройства ---------- */
+const HISTORY_LIMIT = 50;
+const getHistory = () => readJSON(KEYS.history, []);
+function addHistory(entry) {
+  const list = getHistory();
+  list.unshift(entry);
+  try { localStorage.setItem(KEYS.history, JSON.stringify(list.slice(0, HISTORY_LIMIT))); } catch (e) { /* ignore */ }
+}
+function clearHistory(login) {
+  const rest = getHistory().filter((h) => h.login !== login);
+  try { localStorage.setItem(KEYS.history, JSON.stringify(rest)); } catch (e) { /* ignore */ }
+}
 const fetchOrders = () => APPS_URL ? gas("listOrders", {}, true).then((r) => r.data) : api("GET", "/api/orders", undefined, true);
 const fetchBookings = () => APPS_URL ? gas("listBookings", {}, true).then((r) => r.data) : api("GET", "/api/bookings", undefined, true);
 // Заказы и брони одним запросом (для Apps Script это вдвое меньше нагрузки на квоты)

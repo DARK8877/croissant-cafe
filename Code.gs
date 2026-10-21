@@ -7,14 +7,14 @@
    ========================================================== */
 
 var ORDER_HEAD = ['id', 'number', 'createdAt', 'name', 'phone', 'comment', 'items', 'total', 'status', 'city', 'address', 'userLogin'];
-var USER_HEAD = ['login', 'salt', 'hash', 'name', 'phone', 'createdAt'];
+var USER_HEAD = ['login', 'salt', 'hash', 'name', 'phone', 'createdAt', 'address'];
 var DELIVERY_CITY = 'Тараз';
 var LOGIN_RE = /^[A-Za-z0-9_.\-]{3,30}$/;
 var BOOKING_HEAD = ['id', 'createdAt', 'name', 'phone', 'date', 'time', 'guests', 'status'];
 var ORDER_STATUSES = ['Новый', 'Готовится', 'Готов', 'Выполнен', 'Отменён'];
 var BOOKING_STATUSES = ['Новое', 'Подтверждено', 'Завершено', 'Отменено'];
 var CATEGORIES = ['coffee', 'drinks', 'croissants', 'desserts', 'pastry', 'beans'];
-var SETTING_KEYS = ['name', 'tagline', 'heroTitle', 'heroText', 'address', 'phone', 'hours', 'about', 'instagram', 'telegram', 'whatsapp'];
+var SETTING_KEYS = ['name', 'tagline', 'heroTitle', 'heroText', 'address', 'phone', 'hours', 'about', 'instagram', 'telegram', 'whatsapp', 'showTeam'];
 var PHONE_RE = /^\+?[0-9\s\-()]{10,18}$/;
 var TOKEN_TTL = 21600; // 6 часов (максимум для CacheService)
 
@@ -42,6 +42,8 @@ function doPost(e) {
       case 'createBooking': return json_(createBooking_(req));
       case 'login': return json_(login_(req));
       case 'register': return json_(register_(req));
+      case 'updateProfile': return json_(updateProfile_(req));
+      case 'changePassword': return json_(changePassword_(req));
       case 'getSite': return json_(readSite_());
       case 'me': return json_(me_(req.token));
       // --- только администратору ---
@@ -165,6 +167,12 @@ function requireAdmin_(token) {
 function me_(token) {
   var s = session_(token);
   if (!s) throw httpError_(401, 'Сессия истекла. Войдите снова.');
+  if (s.role === 'user') {
+    // Свежие данные из таблицы (имя/телефон/адрес могли поменять с другого устройства)
+    var u = findUser_(s.login);
+    if (!u) throw httpError_(401, 'Аккаунт не найден. Войдите снова.');
+    return { role: 'user', login: u.login, name: u.name, phone: u.phone, address: u.address };
+  }
   return { role: s.role, login: s.login, name: s.name };
 }
 
@@ -173,10 +181,13 @@ function checkLock_(login) {
   var n = Number(CacheService.getScriptCache().get('f_' + login.toLowerCase()) || 0);
   if (n >= 5) throw httpError_(429, 'Слишком много попыток. Подождите 15 минут.');
 }
-function failLogin_(login) {
+function noteFail_(login) {
   var c = CacheService.getScriptCache(), k = 'f_' + login.toLowerCase();
   c.put(k, String(Number(c.get(k) || 0) + 1), 900);
   Utilities.sleep(800);
+}
+function failLogin_(login) {
+  noteFail_(login);
   throw httpError_(401, 'Неверный логин или пароль.');
 }
 
@@ -187,7 +198,7 @@ function findUser_(login) {
   var rows = sh.getRange(2, 1, last - 1, USER_HEAD.length).getValues();
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i][0]).toLowerCase() === login.toLowerCase()) {
-      return { login: String(rows[i][0]), salt: String(rows[i][1]), hash: String(rows[i][2]), name: String(rows[i][3]), phone: String(rows[i][4]) };
+      return { login: String(rows[i][0]), salt: String(rows[i][1]), hash: String(rows[i][2]), name: String(rows[i][3]), phone: String(rows[i][4]), address: String(rows[i][6] || '') };
     }
   }
   return null;
@@ -208,6 +219,7 @@ function login_(req) {
   if (!u || hashPass_(u.salt, password) !== u.hash) failLogin_(login);
   var s = newSession_('user', u.login, u.name);
   s.phone = u.phone;
+  s.address = u.address;
   return s;
 }
 
@@ -223,11 +235,68 @@ function register_(req) {
   try {
     if (findUser_(login)) throw httpError_(409, 'Этот логин уже занят.');
     var salt = Utilities.getUuid();
-    sheet_('Users', USER_HEAD).appendRow([login, salt, hashPass_(salt, password), name, phone, new Date().toISOString()]);
+    sheet_('Users', USER_HEAD).appendRow([login, salt, hashPass_(salt, password), name, phone, new Date().toISOString(), '']);
   } finally { lock.releaseLock(); }
   var s = newSession_('user', login, name);
   s.phone = phone;
+  s.address = '';
   return s;
+}
+
+function requireUser_(token) {
+  var s = session_(token);
+  if (!s) throw httpError_(401, 'Сессия истекла. Войдите снова.');
+  if (s.role !== 'user') throw httpError_(403, 'Это действие доступно только для обычных аккаунтов.');
+  return s;
+}
+
+function userRow_(login) {
+  var sh = sheet_('Users', USER_HEAD);
+  var last = sh.getLastRow();
+  if (last < 2) return 0;
+  var logins = sh.getRange(2, 1, last - 1, 1).getValues();
+  for (var i = 0; i < logins.length; i++) {
+    if (String(logins[i][0]).toLowerCase() === login.toLowerCase()) return i + 2;
+  }
+  return 0;
+}
+
+// Личный кабинет: имя, телефон и адрес доставки по умолчанию
+function updateProfile_(req) {
+  var s = requireUser_(req.token);
+  var name = str_(req.name, 60), phone = str_(req.phone, 30), address = str_(req.address, 150);
+  if (name.length < 2) throw httpError_(400, 'Введите имя (минимум 2 символа).');
+  if (!PHONE_RE.test(phone)) throw httpError_(400, 'Введите корректный телефон.');
+  if (address && address.length < 5) throw httpError_(400, 'Адрес слишком короткий (улица, дом).');
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var row = userRow_(s.login);
+    if (!row) throw httpError_(404, 'Аккаунт не найден.');
+    var sh = sheet_('Users', USER_HEAD);
+    sh.getRange(row, 4, 1, 2).setValues([[name, phone]]);
+    sh.getRange(row, 7).setValue(address);
+  } finally { lock.releaseLock(); }
+  return { name: name, phone: phone, address: address };
+}
+
+// Смена пароля: нужен текущий пароль; неверные попытки считаются так же, как при входе
+function changePassword_(req) {
+  var s = requireUser_(req.token);
+  var current = String(req.current == null ? '' : req.current);
+  var password = String(req.password == null ? '' : req.password);
+  if (password.length < 6 || password.length > 100) throw httpError_(400, 'Новый пароль: минимум 6 символов.');
+  checkLock_(s.login);
+  var u = findUser_(s.login);
+  if (!u) throw httpError_(404, 'Аккаунт не найден.');
+  if (hashPass_(u.salt, current) !== u.hash) { noteFail_(s.login); throw httpError_(403, 'Текущий пароль неверный.'); }
+  var salt = Utilities.getUuid();
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var row = userRow_(s.login);
+    if (!row) throw httpError_(404, 'Аккаунт не найден.');
+    sheet_('Users', USER_HEAD).getRange(row, 2, 1, 2).setValues([[salt, hashPass_(salt, password)]]);
+  } finally { lock.releaseLock(); }
+  return { ok: true };
 }
 
 /* ---------- Общий каталог и настройки сайта ---------- */
@@ -333,6 +402,44 @@ function publicStaff_() {
   };
 }
 
+var DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+// График: { days: [1..7], from: 'HH:MM', to: 'HH:MM' } (1 = понедельник)
+function cleanSched_(sc) {
+  if (!sc || typeof sc !== 'object' || !Array.isArray(sc.days)) return null;
+  var seen = {}, days = [];
+  sc.days.forEach(function (d) {
+    d = Number(d);
+    if (d >= 1 && d <= 7 && Math.floor(d) === d && !seen[d]) { seen[d] = true; days.push(d); }
+  });
+  if (!days.length) return null;
+  days.sort(function (a, b) { return a - b; });
+  function t(v) {
+    var m = /^(\d{2}):(\d{2})$/.exec(String(v || ''));
+    return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? m[0] : '';
+  }
+  var from = t(sc.from), to = t(sc.to);
+  if (!from || !to) { from = ''; to = ''; }
+  return { days: days, from: from, to: to };
+}
+
+function schedText_(sc) {
+  if (!sc) return '';
+  var d = sc.days, text;
+  if (d.length === 7) text = 'Ежедневно';
+  else {
+    var parts = [], i = 0;
+    while (i < d.length) {
+      var j = i;
+      while (j + 1 < d.length && d[j + 1] === d[j] + 1) j++;
+      parts.push(j > i ? DAY_NAMES[d[i] - 1] + '–' + DAY_NAMES[d[j] - 1] : DAY_NAMES[d[i] - 1]);
+      i = j + 1;
+    }
+    text = parts.join(', ');
+  }
+  return sc.from ? text + ', ' + sc.from + '–' + sc.to : text;
+}
+
 function cleanStaff_(s) {
   s = s || {};
   var id = str_(s.id, 40);
@@ -344,9 +451,11 @@ function cleanStaff_(s) {
   var photo = String(s.photo || '');
   if (photo && !/^(https?:\/\/|data:image\/)/i.test(photo)) photo = '';
   if (photo.length > 200000) throw httpError_(400, 'Слишком большое фото.');
+  var sched = cleanSched_(s.sched);
   return {
     id: id, name: name, position: position, phone: phone,
-    schedule: str_(s.schedule, 100), about: str_(s.about, 500), photo: photo,
+    sched: sched, schedule: sched ? schedText_(sched) : str_(s.schedule, 100),
+    about: str_(s.about, 500), photo: photo,
     active: !!s.active, showOnSite: !!s.showOnSite
   };
 }

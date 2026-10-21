@@ -85,6 +85,7 @@
 
       <!-- ===== Сотрудники ===== -->
       <section id="sec-staff" class="sec" hidden>
+        <label class="check team-toggle"><input type="checkbox" id="teamVisible" checked> Показывать блок «Наша команда» на сайте</label>
         <div class="toolbar">
           <input type="search" id="staffSearch" placeholder="Поиск по имени, должности или телефону">
           <select id="staffFilter" aria-label="Фильтр сотрудников">
@@ -173,9 +174,21 @@
     <form id="staffForm" novalidate>
       <label>Имя и фамилия<input id="st_name" maxlength="60" required></label>
       <label>Должность<input id="st_position" maxlength="60" placeholder="Бариста, пекарь, администратор…" required></label>
-      <div class="row">
-        <label>Телефон<input id="st_phone" type="tel" maxlength="30" placeholder="+7 (700) 000-00-00"></label>
-        <label>График работы<input id="st_schedule" maxlength="100" placeholder="Пн–Пт, 08:00–16:00"></label>
+      <label>Телефон (виден только вам)<input id="st_phone" type="tel" maxlength="30" placeholder="+7 (700) 000-00-00"></label>
+      <div class="sched">
+        <span class="sched__title">График работы</span>
+        <div class="sched__presets">
+          <button type="button" class="btn btn--sm btn--ghost" data-preset="1,2,3,4,5,6,7">Каждый день</button>
+          <button type="button" class="btn btn--sm btn--ghost" data-preset="1,2,3,4,5">Пн–Пт</button>
+          <button type="button" class="btn btn--sm btn--ghost" data-preset="6,7">Сб–Вс</button>
+          <button type="button" class="btn btn--sm btn--ghost" data-preset="">Очистить</button>
+        </div>
+        <div class="sched__days" id="st_days"></div>
+        <div class="row">
+          <label>С<input type="time" id="st_from" value="08:00"></label>
+          <label>До<input type="time" id="st_to" value="16:00"></label>
+        </div>
+        <p class="sched__preview" id="st_sched_preview"></p>
       </div>
       <label>Коротко о сотруднике<textarea id="st_about" rows="3" maxlength="500"></textarea></label>
       <label>Фото с устройства<input id="st_file" type="file" accept="image/*"></label>

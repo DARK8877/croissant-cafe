@@ -22,7 +22,7 @@ const TOKEN_TTL = 6 * 60 * 60 * 1000;
 const ORDER_STATUSES = ["Новый", "Готовится", "Готов", "Выполнен", "Отменён"];
 const BOOKING_STATUSES = ["Новое", "Подтверждено", "Завершено", "Отменено"];
 const CATEGORIES = ["coffee", "drinks", "croissants", "desserts", "pastry", "beans"];
-const SETTING_KEYS = ["name", "tagline", "heroTitle", "heroText", "address", "phone", "hours", "about", "instagram", "telegram", "whatsapp"];
+const SETTING_KEYS = ["name", "tagline", "heroTitle", "heroText", "address", "phone", "hours", "about", "instagram", "telegram", "whatsapp", "showTeam"];
 const PHONE_RE = /^\+?[0-9\s\-()]{10,18}$/;
 
 fs.mkdirSync(DATA, { recursive: true });
@@ -65,9 +65,12 @@ function checkLock(login) {
   const f = fails.get(String(login).toLowerCase());
   if (f && f.n >= 5 && f.until > Date.now()) throw new HttpError(429, "Слишком много попыток. Подождите 15 минут.");
 }
-async function failLogin(login) {
+function noteFail(login) {
   const k = String(login).toLowerCase(), f = fails.get(k);
   fails.set(k, { n: (f && f.until > Date.now() ? f.n : 0) + 1, until: Date.now() + 15 * 60 * 1000 });
+}
+async function failLogin(login) {
+  noteFail(login);
   await new Promise((r) => setTimeout(r, 800));
   throw new HttpError(401, "Неверный логин или пароль.");
 }
@@ -81,7 +84,7 @@ async function loginUser(b) {
   }
   const u = findUser(login);
   if (!u || !safeEqual(hashPass(u.salt, password), u.hash)) await failLogin(login);
-  return Object.assign(newSession("user", u.login, u.name), { phone: u.phone });
+  return Object.assign(newSession("user", u.login, u.name), { phone: u.phone, address: u.address || "" });
 }
 function registerUser(b) {
   const login = str(b.login, 30), password = String(b.password == null ? "" : b.password);
@@ -94,9 +97,48 @@ function registerUser(b) {
   if (findUser(login)) throw new HttpError(409, "Этот логин уже занят.");
   const salt = crypto.randomBytes(16).toString("hex");
   const users = readJson("users.json", []);
-  users.push({ login, salt, hash: hashPass(salt, password), name, phone, createdAt: new Date().toISOString() });
+  users.push({ login, salt, hash: hashPass(salt, password), name, phone, address: "", createdAt: new Date().toISOString() });
   writeJson("users.json", users);
-  return Object.assign(newSession("user", login, name), { phone });
+  return Object.assign(newSession("user", login, name), { phone, address: "" });
+}
+
+/* ---------- Личный кабинет: профиль и пароль ---------- */
+function requireUser(sess) {
+  if (!sess) throw new HttpError(401, "Сессия истекла. Войдите снова.");
+  if (sess.role !== "user") throw new HttpError(403, "Это действие доступно только для обычных аккаунтов.");
+  return sess;
+}
+function updateProfile(b, sess) {
+  requireUser(sess);
+  const name = str(b.name, 60), phone = str(b.phone, 30), address = str(b.address, 150);
+  if (name.length < 2) throw new HttpError(400, "Введите имя (минимум 2 символа).");
+  if (!PHONE_RE.test(phone)) throw new HttpError(400, "Введите корректный телефон.");
+  if (address && address.length < 5) throw new HttpError(400, "Адрес слишком короткий (улица, дом).");
+  const users = readJson("users.json", []);
+  const u = users.find((x) => x.login.toLowerCase() === sess.login.toLowerCase());
+  if (!u) throw new HttpError(404, "Аккаунт не найден.");
+  u.name = name; u.phone = phone; u.address = address;
+  writeJson("users.json", users);
+  sess.name = name;
+  return { name, phone, address };
+}
+async function changePassword(b, sess) {
+  requireUser(sess);
+  const current = String(b.current == null ? "" : b.current), password = String(b.password == null ? "" : b.password);
+  if (password.length < 6 || password.length > 100) throw new HttpError(400, "Новый пароль: минимум 6 символов.");
+  checkLock(sess.login);
+  const users = readJson("users.json", []);
+  const u = users.find((x) => x.login.toLowerCase() === sess.login.toLowerCase());
+  if (!u) throw new HttpError(404, "Аккаунт не найден.");
+  if (!safeEqual(hashPass(u.salt, current), u.hash)) {
+    noteFail(sess.login);
+    await new Promise((r) => setTimeout(r, 800));
+    throw new HttpError(403, "Текущий пароль неверный.");
+  }
+  u.salt = crypto.randomBytes(16).toString("hex");
+  u.hash = hashPass(u.salt, password);
+  writeJson("users.json", users);
+  return { ok: true };
 }
 function safeEqual(a, b) {
   const ha = crypto.createHash("sha256").update(String(a)).digest();
@@ -182,6 +224,34 @@ function publicStaff(list) {
     .map((s) => ({ id: s.id, name: s.name, position: s.position, photo: s.photo || "", about: s.about || "" }));
 }
 
+const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+// График: { days: [1..7], from: "HH:MM", to: "HH:MM" } (1 = понедельник); текст строит сервер
+function cleanSched(sc) {
+  if (!sc || typeof sc !== "object" || !Array.isArray(sc.days)) return null;
+  const days = [...new Set(sc.days.map(Number).filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))].sort((a, b) => a - b);
+  if (!days.length) return null;
+  const t = (v) => { const m = /^(\d{2}):(\d{2})$/.exec(String(v || "")); return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? m[0] : ""; };
+  let from = t(sc.from), to = t(sc.to);
+  if (!from || !to) { from = ""; to = ""; }
+  return { days, from, to };
+}
+function schedText(sc) {
+  if (!sc) return "";
+  const d = sc.days; let text;
+  if (d.length === 7) text = "Ежедневно";
+  else {
+    const parts = []; let i = 0;
+    while (i < d.length) {
+      let j = i;
+      while (j + 1 < d.length && d[j + 1] === d[j] + 1) j++;
+      parts.push(j > i ? DAY_NAMES[d[i] - 1] + "–" + DAY_NAMES[d[j] - 1] : DAY_NAMES[d[i] - 1]);
+      i = j + 1;
+    }
+    text = parts.join(", ");
+  }
+  return sc.from ? text + ", " + sc.from + "–" + sc.to : text;
+}
+
 function cleanStaff(s) {
   s = s || {};
   const id = str(s.id, 40);
@@ -193,7 +263,8 @@ function cleanStaff(s) {
   let photo = String(s.photo || "");
   if (photo && !/^(https?:\/\/|data:image\/)/i.test(photo)) photo = "";
   if (photo.length > 400000) throw new HttpError(400, "Слишком большое фото.");
-  return { id, name, position, phone, schedule: str(s.schedule, 100), about: str(s.about, 500), photo, active: !!s.active, showOnSite: !!s.showOnSite };
+  const sched = cleanSched(s.sched);
+  return { id, name, position, phone, sched, schedule: sched ? schedText(sched) : str(s.schedule, 100), about: str(s.about, 500), photo, active: !!s.active, showOnSite: !!s.showOnSite };
 }
 
 // Версия сайта общая: сайт подтянет новую команду тем же опросом, что и каталог
@@ -276,9 +347,16 @@ async function handleApi(req, res, url) {
   if (m === "POST" && p === "/api/bookings") return send(res, 201, createBooking(await readBody(req, 20 * 1024)));
   if (m === "POST" && p === "/api/login") return send(res, 200, await loginUser(await readBody(req, 10 * 1024)));
   if (m === "POST" && p === "/api/register") return send(res, 201, registerUser(await readBody(req, 10 * 1024)));
+  if (m === "POST" && p === "/api/profile") return send(res, 200, updateProfile(await readBody(req, 10 * 1024), getSession(req)));
+  if (m === "POST" && p === "/api/password") return send(res, 200, await changePassword(await readBody(req, 10 * 1024), getSession(req)));
   if (m === "GET" && p === "/api/me") {
     const s = getSession(req);
     if (!s) throw new HttpError(401, "Сессия истекла. Войдите снова.");
+    if (s.role === "user") {
+      const u = findUser(s.login); // свежие данные (могли измениться с другого устройства)
+      if (!u) throw new HttpError(401, "Аккаунт не найден. Войдите снова.");
+      return send(res, 200, { role: "user", login: u.login, name: u.name, phone: u.phone, address: u.address || "" });
+    }
     return send(res, 200, { role: s.role, login: s.login, name: s.name });
   }
 
@@ -333,7 +411,7 @@ const MIME = {
   ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "application/javascript; charset=utf-8",
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".webp": "image/webp"
 };
-const PUBLIC_FILES = new Set(["index.html", "admin.html", "login.html", "style.css", "admin.css", "login.css", "script.js", "admin.js", "login.js", "storage.js", "config.js"]);
+const PUBLIC_FILES = new Set(["index.html", "admin.html", "login.html", "account.html", "style.css", "admin.css", "login.css", "account.css", "script.js", "admin.js", "login.js", "account.js", "storage.js", "config.js"]);
 
 function serveStatic(req, res, url) {
   let rel = decodeURIComponent(url.pathname).replace(/^\/+/, "") || "index.html";

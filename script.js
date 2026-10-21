@@ -65,7 +65,7 @@ function renderCatalog() {
 
 /* ---------- 2а. Команда ---------- */
 function renderTeam() {
-  const list = getStaff();
+  const list = getSettings().showTeam === "0" ? [] : getStaff();
   $("#team").hidden = !list.length;
   $("#navTeam").hidden = !list.length;
   $("#teamGrid").innerHTML = list.map((s) => {
@@ -76,9 +76,11 @@ function renderTeam() {
     return `
       <article class="member">
         ${photo}
-        <h3>${escapeHTML(s.name)}</h3>
-        <p class="member__pos">${escapeHTML(s.position)}</p>
-        ${s.about ? `<p class="member__about">${escapeHTML(s.about)}</p>` : ""}
+        <div class="member__body">
+          <h3>${escapeHTML(s.name)}</h3>
+          <p class="member__pos">${escapeHTML(s.position)}</p>
+          ${s.about ? `<p class="member__about">${escapeHTML(s.about)}</p>` : ""}
+        </div>
       </article>`;
   }).join("");
 }
@@ -191,6 +193,7 @@ function openCheckout() {
   if (s && s.role === "user") {
     if (!$("#coName").value && s.name) $("#coName").value = s.name;
     if (!$("#coPhone").value && s.phone) $("#coPhone").value = s.phone;
+    if (!$("#coAddress").value && s.address) $("#coAddress").value = s.address;
   }
   openModal($("#checkoutModal"));
 }
@@ -223,6 +226,9 @@ async function submitOrder(e) {
   try {
     // Заказ уходит на сервер; цены и наличие сервер проверяет по своему каталогу
     const res = await createOrder({ name, phone, comment, items, city: DELIVERY_CITY, address });
+    // История заказов — только на этом устройстве (в личном кабинете)
+    const sess = getSession();
+    addHistory({ id: res.id, number: res.number, createdAt: new Date().toISOString(), items, total: res.total, city: DELIVERY_CITY, address, login: sess && sess.role === "user" ? sess.login : "" });
     saveCart([]);
     renderCart();
     $("#checkoutForm").reset();
@@ -310,7 +316,8 @@ function openAccount() {
   $("#accInfo").textContent = s.role === "admin"
     ? "Вы вошли как администратор."
     : "Вы вошли как " + (s.name || s.login) + " (" + s.login + ").";
-  // Кнопка админки показывается ТОЛЬКО администратору
+  // Кнопки: «Личный кабинет» — обычному пользователю, «Открыть админку» — ТОЛЬКО администратору
+  $("#cabinetLink").hidden = s.role !== "user";
   $("#adminLink").hidden = s.role !== "admin";
   openModal($("#accountModal"));
 }
@@ -410,7 +417,12 @@ function init() {
   $("#logoutBtn").addEventListener("click", logout);
   $$("[data-auth-tab]").forEach((b) => b.addEventListener("click", () => setAuthTab(b.dataset.authTab)));
   // Если токен истёк (прошло больше 6 часов) — выходим из аккаунта на этом устройстве
-  if (getSession()) fetchMe().catch((ex) => { if (ex.status === 401) { clearToken(); refreshAccount(); } });
+  if (getSession()) {
+    fetchMe().then((me) => {
+      // Имя/телефон/адрес могли измениться на другом устройстве
+      if (me && me.role === "user") { updateSession({ name: me.name, phone: me.phone, address: me.address }); refreshAccount(); }
+    }).catch((ex) => { if (ex.status === 401) { clearToken(); refreshAccount(); } });
+  }
 
   $("#checkoutForm").addEventListener("submit", submitOrder);
   $("#bookingForm").addEventListener("submit", submitBooking);
@@ -437,6 +449,9 @@ function init() {
   setInterval(pollSite, 15000);
   document.addEventListener("visibilitychange", pollSite);
   window.addEventListener("online", pollSite);
+
+  // Ссылка из личного кабинета «Повторить заказ» открывает корзину
+  if (location.hash === "#cart") { renderCart(); openModal($("#cartDrawer")); history.replaceState(null, "", location.pathname + location.search); }
 }
 
 init();

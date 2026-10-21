@@ -471,10 +471,45 @@ function renderBookings() {
 let staffCache = [];
 let editingStaffId = null;
 let pendingStaffImage = "";
+let schedDays = new Set();       // выбранные дни графика (1 = Пн … 7 = Вс)
+let legacySchedule = "";         // старый текстовый график (если он был введён вручную)
+const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+// Тот же текст графика строит и сервер
+function schedText(sc) {
+  if (!sc) return "";
+  const d = sc.days; let text;
+  if (d.length === 7) text = "Ежедневно";
+  else {
+    const parts = []; let i = 0;
+    while (i < d.length) {
+      let j = i;
+      while (j + 1 < d.length && d[j + 1] === d[j] + 1) j++;
+      parts.push(j > i ? DAY_NAMES[d[i] - 1] + "–" + DAY_NAMES[d[j] - 1] : DAY_NAMES[d[i] - 1]);
+      i = j + 1;
+    }
+    text = parts.join(", ");
+  }
+  return sc.from ? text + ", " + sc.from + "–" + sc.to : text;
+}
+function currentSched() {
+  const days = [...schedDays].sort((a, b) => a - b);
+  if (!days.length) return null;
+  const from = $("#st_from").value, to = $("#st_to").value;
+  return { days, from: from && to ? from : "", to: from && to ? to : "" };
+}
+function renderSchedDays() {
+  $("#st_days").innerHTML = DAY_NAMES.map((n, i) =>
+    `<button type="button" class="chip ${schedDays.has(i + 1) ? "on" : ""}" data-day="${i + 1}" aria-pressed="${schedDays.has(i + 1)}">${n}</button>`).join("");
+  const sc = currentSched();
+  $("#st_sched_preview").textContent = sc ? "График: " + schedText(sc)
+    : (legacySchedule ? "Прежний график: " + legacySchedule + " (выберите дни, чтобы заменить)" : "График не выбран");
+}
 
 async function loadStaff() {
   try {
     staffCache = await fetchStaffAll();
+    $("#teamVisible").checked = getSettings().showTeam !== "0";
     renderStaff();
   } catch (ex) {
     if (ex.status === 401) return goLogin();
@@ -527,7 +562,11 @@ function openStaffForm(id) {
   $("#st_name").value = s ? s.name : "";
   $("#st_position").value = s ? s.position : "";
   $("#st_phone").value = s ? s.phone || "" : "";
-  $("#st_schedule").value = s ? s.schedule || "" : "";
+  schedDays = new Set(s && s.sched ? s.sched.days : []);
+  legacySchedule = s && !s.sched ? s.schedule || "" : "";
+  $("#st_from").value = s && s.sched && s.sched.from ? s.sched.from : "08:00";
+  $("#st_to").value = s && s.sched && s.sched.to ? s.sched.to : "16:00";
+  renderSchedDays();
   $("#st_about").value = s ? s.about || "" : "";
   $("#st_active").checked = s ? !!s.active : true;
   $("#st_show").checked = s ? !!s.showOnSite : false;
@@ -543,7 +582,7 @@ async function onStaffFile(e) {
   const file = e.target.files[0];
   if (!file) return;
   try {
-    pendingStaffImage = await compressImage(file, 360, 0.7);
+    pendingStaffImage = await compressImage(file, 480, 0.7);
     $("#st_url").value = "";
     updateStaffPreview();
   } catch (err) { $("#st_err").textContent = err.message; }
@@ -565,7 +604,8 @@ async function saveStaffForm(e) {
   err.textContent = "";
   const item = {
     id: editingStaffId || genId("s"), name, position, phone,
-    schedule: $("#st_schedule").value.trim(), about: $("#st_about").value.trim(), photo,
+    sched: currentSched(), schedule: currentSched() ? schedText(currentSched()) : legacySchedule,
+    about: $("#st_about").value.trim(), photo,
     active: $("#st_active").checked, showOnSite: $("#st_show").checked
   };
   const btn = $("#staffForm button[type=submit]");
@@ -759,6 +799,29 @@ function init() {
   $("#st_url").addEventListener("input", () => {
     const v = $("#st_url").value.trim();
     if (/^https?:\/\//i.test(v)) { pendingStaffImage = v; $("#st_file").value = ""; updateStaffPreview(); }
+  });
+  // График: быстрые шаблоны, дни недели и время
+  $("#st_days").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-day]"); if (!b) return;
+    const d = Number(b.dataset.day);
+    if (schedDays.has(d)) schedDays.delete(d); else schedDays.add(d);
+    renderSchedDays();
+  });
+  $("#staffModal").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-preset]"); if (!b) return;
+    schedDays = new Set(b.dataset.preset ? b.dataset.preset.split(",").map(Number) : []);
+    renderSchedDays();
+  });
+  $("#st_from").addEventListener("input", renderSchedDays);
+  $("#st_to").addEventListener("input", renderSchedDays);
+  // Показать/скрыть блок «Команда» на сайте
+  $("#teamVisible").addEventListener("change", async (e) => {
+    const box = e.target, on = box.checked;
+    box.disabled = true;
+    const ok = await mutateSite((p, st) => ({ settings: Object.assign({}, st, { showTeam: on ? "1" : "0" }) }));
+    box.disabled = false;
+    if (ok) toast(on ? "Блок «Команда» показан на сайте." : "Блок «Команда» скрыт с сайта.");
+    else box.checked = !on;
   });
   $("#staffSearch").addEventListener("input", renderStaff);
   $("#staffFilter").addEventListener("change", renderStaff);

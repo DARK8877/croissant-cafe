@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Личный кабинет — Круасан и точка</title>
+  <link rel="stylesheet" href="account.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="top__in">
+    <a href="index.html" class="brand" aria-label="На главную">
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="30" fill="#496B55"/>
+        <path d="M12 38c2-12 10-18 20-18s18 6 20 18c-4-3-8-4-12-4-3 0-5 2-8 2s-5-2-8-2c-4 0-8 1-12 4z" fill="#F7F1E5"/>
+        <circle cx="48" cy="46" r="6" fill="#DE7848"/>
+      </svg>
+      <span>Круасан и точка</span>
+    </a>
+    <nav>
+      <a href="index.html" class="back">← На сайт</a>
+      <button type="button" class="link" id="logout" hidden>Выйти</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- Гость -->
+  <section class="notice" id="guestBox" hidden>
+    <h1>Личный кабинет</h1>
+    <p id="guestText">Чтобы увидеть профиль и историю заказов, войдите в аккаунт или зарегистрируйтесь: кнопка «Войти» в шапке сайта.</p>
+    <a class="btn btn--primary" href="index.html">Перейти на сайт</a>
+  </section>
+
+  <!-- Администратор -->
+  <section class="notice" id="adminBox" hidden>
+    <h1>Вы вошли как администратор</h1>
+    <p>У администратора нет личного кабинета покупателя. Управление сайтом, заказами и сотрудниками находится в админ-панели.</p>
+    <a class="btn btn--accent" href="admin.html">Открыть админку</a>
+  </section>
+
+  <!-- Кабинет -->
+  <div class="cabinet" id="cabinet" hidden>
+    <aside class="side">
+      <div class="avatar" id="avatar" aria-hidden="true">?</div>
+      <h1 id="pName">—</h1>
+      <p class="muted" id="pLogin"></p>
+      <p class="muted" id="pPhone"></p>
+      <nav class="tabs" role="tablist" aria-label="Разделы кабинета">
+        <button type="button" class="tab active" data-tab="profile" role="tab">Профиль</button>
+        <button type="button" class="tab" data-tab="orders" role="tab">Мои заказы</button>
+        <button type="button" class="tab" data-tab="password" role="tab">Пароль</button>
+      </nav>
+      <button type="button" class="btn btn--ghost btn--block" id="logout2">Выйти из аккаунта</button>
+    </aside>
+
+    <div class="panels">
+
+      <!-- Профиль -->
+      <section class="panel" id="tab-profile">
+        <h2>Мои данные</h2>
+        <p class="muted">Эти данные подставляются в заказ автоматически.</p>
+        <form id="profileForm" novalidate>
+          <label>Логин<input id="fLogin" readonly></label>
+          <div class="row">
+            <label>Имя<input id="fName" maxlength="60" autocomplete="name" required></label>
+            <label>Телефон<input id="fPhone" type="tel" placeholder="+7 (700) 000-00-00" autocomplete="tel" required></label>
+          </div>
+          <label>Адрес доставки по умолчанию (Тараз)<input id="fAddress" maxlength="150" placeholder="ул. Толе би, 42, кв. 5" autocomplete="street-address"></label>
+          <p class="msg" id="profMsg" role="status"></p>
+          <button class="btn btn--primary" type="submit">Сохранить изменения</button>
+        </form>
+      </section>
+
+      <!-- Заказы -->
+      <section class="panel" id="tab-orders" hidden>
+        <div class="panel__head">
+          <div>
+            <h2>История заказов</h2>
+            <p class="muted">Хранится только на этом устройстве: на другом телефоне или в другом браузере её не будет.</p>
+          </div>
+          <button type="button" class="btn btn--ghost btn--sm" id="clearHistory" hidden>Очистить историю</button>
+        </div>
+        <div class="stats">
+          <div class="stat"><b id="ordCount">0</b><span>заказов</span></div>
+          <div class="stat"><b id="ordSum">0 ₸</b><span>на сумму</span></div>
+        </div>
+        <div id="ordList"></div>
+      </section>
+
+      <!-- Пароль -->
+      <section class="panel" id="tab-password" hidden>
+        <h2>Смена пароля</h2>
+        <p class="muted">Нужен текущий пароль. Новый — не короче 6 символов.</p>
+        <form id="passForm" novalidate>
+          <label>Текущий пароль<input id="pCur" type="password" autocomplete="current-password" required></label>
+          <label>Новый пароль<input id="pNew" type="password" maxlength="100" autocomplete="new-password" required></label>
+          <label>Повторите новый пароль<input id="pNew2" type="password" maxlength="100" autocomplete="new-password" required></label>
+          <p class="msg" id="passMsg" role="status"></p>
+          <button class="btn btn--primary" type="submit">Изменить пароль</button>
+        </form>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="storage.js"></script>
+<script src="account.js"></script>
+</body>
+</html>

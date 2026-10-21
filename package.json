@@ -1,8 +1,0 @@
-{
-  "name": "croissant-cafe",
-  "version": "2.0.0",
-  "private": true,
-  "description": "Сайт кофейни «Круасан и точка»",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" }
-}

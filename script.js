@@ -233,9 +233,8 @@ async function submitOrder(e) {
     renderCart();
     $("#checkoutForm").reset();
     showInfo("Заказ № " + res.number + " оформлен",
-      `<p>Спасибо, ${escapeHTML(name)}! Заказ на сумму <b>${formatPrice(res.total)}</b> принят и сохранён на сервере.</p>
-       <p>Адрес доставки: ${escapeHTML(DELIVERY_CITY)}, ${escapeHTML(address)}.</p>
-       <p class="note">Это учебный сайт: службы доставки нет, заказ не исполняется.</p>`);
+      `<p>Спасибо, ${escapeHTML(name)}! Заказ на сумму <b>${formatPrice(res.total)}</b> принят.</p>
+       <p>Адрес доставки: ${escapeHTML(DELIVERY_CITY)}, ${escapeHTML(address)}.</p>`);
   } catch (ex) {
     // Корзину не очищаем: заказ не сохранён
     err.textContent = ex.message;
@@ -271,8 +270,7 @@ async function submitBooking(e) {
     $("#bookingForm").reset();
     $("#bkGuests").value = 2;
     showInfo("Заявка создана",
-      `<p>${escapeHTML(name)}, мы записали вас на ${escapeHTML(date)} в ${escapeHTML(time)} (гостей: ${guests}).</p>
-       <p class="note">Заявка сохранена на сервере. Это учебный сайт.</p>`);
+      `<p>${escapeHTML(name)}, мы записали вас на ${escapeHTML(date)} в ${escapeHTML(time)} (гостей: ${guests}).</p>`);
   } catch (ex) {
     err.textContent = ex.message;
   } finally {
@@ -295,7 +293,7 @@ function submitSubscribe(e) {
     msg.style.color = "#e8836d"; msg.textContent = "Введите корректный e-mail."; return;
   }
   msg.style.color = "var(--sage)";
-  msg.textContent = "Спасибо! (Демо: адрес нигде не сохраняется.)";
+  msg.textContent = "Спасибо!";
   $("#subscribeForm").reset();
 }
 

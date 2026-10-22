@@ -185,8 +185,8 @@ h1, h2, h3, h4 {
 .card:hover { transform: translateY(-5px); box-shadow: 0 26px 46px -22px rgba(74, 42, 27, .6); }
 .grid > .card:nth-child(even):hover { transform: translateY(21px); }
 .card img {
-  width: calc(100% - 24px); margin: 12px 12px 0; aspect-ratio: 5 / 4; object-fit: cover;
-  border-radius: 999px 999px 18px 18px; /* арка */
+  width: calc(100% - 24px); margin: 12px 12px 0; aspect-ratio: 4 / 3.4; object-fit: cover;
+  border-radius: 20px; /* мягкое скругление вместо арки */
 }
 .card__body { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .card__title { font-size: 1.55rem; line-height: 1.08; margin: 0; color: var(--espresso); }

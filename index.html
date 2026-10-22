@@ -212,6 +212,19 @@
       <label>Город<input type="text" id="coCity" value="Тараз" readonly></label>
       <label>Адрес доставки (улица, дом, квартира)<input type="text" id="coAddress" maxlength="150" placeholder="ул. Толе би, 42, кв. 5" autocomplete="street-address" required></label>
       <label>Комментарий<textarea id="coComment" rows="3" maxlength="300"></textarea></label>
+      <fieldset class="pay">
+        <legend>Способ оплаты</legend>
+        <label class="pay__opt"><input type="radio" name="coPay" id="coPayCard" value="card" checked><span>Картой онлайн</span></label>
+        <label class="pay__opt"><input type="radio" name="coPay" id="coPayCash" value="cash"><span>Наличными курьеру</span></label>
+      </fieldset>
+      <div class="card-form" id="cardBox">
+        <label>Номер карты<input type="text" id="cardNum" inputmode="numeric" autocomplete="cc-number" placeholder="0000 0000 0000 0000" maxlength="23"></label>
+        <label>Имя на карте<input type="text" id="cardHolder" autocomplete="cc-name" placeholder="IVAN IVANOV" maxlength="40"></label>
+        <div class="row">
+          <label>Срок действия<input type="text" id="cardExp" inputmode="numeric" autocomplete="cc-exp" placeholder="ММ/ГГ" maxlength="5"></label>
+          <label>CVC<input type="password" id="cardCvc" inputmode="numeric" autocomplete="cc-csc" placeholder="•••" maxlength="4"></label>
+        </div>
+      </div>
       <p class="form-msg form-msg--error" id="coError" role="alert"></p>
       <button class="btn btn--primary btn--block" type="submit">Подтвердить заказ</button>
     </form>

@@ -198,6 +198,20 @@ function openCheckout() {
   openModal($("#checkoutModal"));
 }
 
+// Проверка карты (алгоритм Луна) и срока действия
+function luhnOk(d) {
+  if (!/^\d{13,19}$/.test(d)) return false;
+  let s = 0, alt = false;
+  for (let i = d.length - 1; i >= 0; i--) { let n = +d[i]; if (alt) { n *= 2; if (n > 9) n -= 9; } s += n; alt = !alt; }
+  return s % 10 === 0;
+}
+function expOk(v) {
+  const m = /^(\d{2})\/(\d{2})$/.exec(v.trim());
+  if (!m) return false;
+  const mo = +m[1], yr = 2000 + +m[2], now = new Date();
+  return mo >= 1 && mo <= 12 && (yr > now.getFullYear() || (yr === now.getFullYear() && mo >= now.getMonth() + 1));
+}
+
 async function submitOrder(e) {
   e.preventDefault();
   const name = $("#coName").value.trim();
@@ -212,6 +226,16 @@ async function submitOrder(e) {
   if (name.length < 2) { err.textContent = "Введите имя (минимум 2 символа)."; return; }
   if (!PHONE_RE.test(phone)) { err.textContent = "Введите корректный телефон."; return; }
   if (address.length < 5) { err.textContent = "Укажите адрес доставки в Таразе (улица, дом)."; return; }
+  const byCard = $("#coPayCard").checked;
+  let last4 = "";
+  if (byCard) {
+    const digits = $("#cardNum").value.replace(/\D/g, "");
+    if (!luhnOk(digits)) { err.textContent = "Проверьте номер карты."; return; }
+    if (!expOk($("#cardExp").value)) { err.textContent = "Проверьте срок действия карты."; return; }
+    if (!/^\d{3,4}$/.test($("#cardCvc").value)) { err.textContent = "Введите CVC (3 цифры на обороте карты)."; return; }
+    if ($("#cardHolder").value.trim().length < 3) { err.textContent = "Введите имя, как на карте."; return; }
+    last4 = digits.slice(-4);
+  }
   err.textContent = "";
   if (!navigator.onLine) { err.textContent = "Нет подключения к интернету."; return; }
 
@@ -222,16 +246,21 @@ async function submitOrder(e) {
     return { id: p.id, name: p.name, price: p.price, qty: i.qty };
   });
 
-  btn.disabled = true; btn.textContent = "Отправляем…";
+  btn.disabled = true; btn.textContent = byCard ? "Обрабатываем платёж…" : "Отправляем…";
   try {
+    if (byCard) await new Promise((r) => setTimeout(r, 1400));
+    // Номер карты никуда не отправляется и не сохраняется — в заказ попадает только отметка об оплате
+    const payNote = byCard ? "Оплата: картой •••• " + last4 : "Оплата: наличными курьеру";
+    const fullComment = (payNote + (comment ? "\n" + comment : "")).slice(0, 300);
     // Заказ уходит на сервер; цены и наличие сервер проверяет по своему каталогу
-    const res = await createOrder({ name, phone, comment, items, city: DELIVERY_CITY, address });
+    const res = await createOrder({ name, phone, comment: fullComment, items, city: DELIVERY_CITY, address });
     // История заказов — только на этом устройстве (в личном кабинете)
     const sess = getSession();
     addHistory({ id: res.id, number: res.number, createdAt: new Date().toISOString(), items, total: res.total, city: DELIVERY_CITY, address, login: sess && sess.role === "user" ? sess.login : "" });
     saveCart([]);
     renderCart();
     $("#checkoutForm").reset();
+    $("#cardBox").hidden = false;
     showInfo("Заказ № " + res.number + " оформлен",
       `<p>Спасибо, ${escapeHTML(name)}! Заказ на сумму <b>${formatPrice(res.total)}</b> принят.</p>
        <p>Адрес доставки: ${escapeHTML(DELIVERY_CITY)}, ${escapeHTML(address)}.</p>`);
@@ -422,6 +451,11 @@ function init() {
     }).catch((ex) => { if (ex.status === 401) { clearToken(); refreshAccount(); } });
   }
 
+  // Поля оплаты: форматирование и переключение «карта / наличные»
+  $("#cardNum").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 19).replace(/(.{4})/g, "$1 ").trim(); });
+  $("#cardExp").addEventListener("input", (e) => { let d = e.target.value.replace(/\D/g, "").slice(0, 4); e.target.value = d.length > 2 ? d.slice(0, 2) + "/" + d.slice(2) : d; });
+  $("#cardCvc").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 4); });
+  $$("input[name=coPay]").forEach((r) => r.addEventListener("change", () => { $("#cardBox").hidden = !$("#coPayCard").checked; }));
   $("#checkoutForm").addEventListener("submit", submitOrder);
   $("#bookingForm").addEventListener("submit", submitBooking);
   $("#subscribeForm").addEventListener("submit", submitSubscribe);
